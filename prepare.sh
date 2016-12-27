@@ -9,20 +9,21 @@ if [ -r /etc/bareos/bareos.env ]; then
   #run local definition script
   source  /etc/bareos/bareos.env
 fi
+chown -R mysql:adm /db /var/log/mysql
 
 #init db and start db daemon
 DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-mysql}
 if [ ! -d /db ] || ! ls -1 /db/* >/dev/null ; then
 (
   service mysql stop
-  chown -R mysql:adm /db /var/log/mysql
+  
   #mariadb 5.6 procedure
   sed -i "s!datadir=.*!#datadir=/db!" /etc/mysql/my.cnf
   echo -e "[server]\ndatadir=/db" >>/etc/mysql/my.cnf
   mysql_install_db --datadir=/db --force
   /usr/bin/mysqld_safe --datadir=/db &
   sleep 10
-  mysqladmin password "$DB_ROOT_PASSWORD"
+  
  
 #  mysql 5.7 procedure
 # sed -i "s!datadir=.*!datadir=/db!" /etc/mysql/my.cnf
@@ -49,21 +50,20 @@ password=${DB_ROOT_PASSWORD}
 " >$HOME/.my.cnf
 fi
 
-#convert pre 16.2 config
-if [ -f /etc/bareos/bareos-dir.conf ]; then
-(
-  bash -x /root/migrate_config.sh
-  LOGDATE=`date '+%Y%m%d-%H%M%S'`
-  mysqldump -A --skip-lock-tables >/db/bareos_mysql.$LOGDATE.dump
-  /usr/lib/bareos/scripts/update_bareos_tables
-) >>/var/log/bareos/prepare.log
-fi
+mysqladmin password "$DB_ROOT_PASSWORD"
+mysql_upgrade >>/var/log/bareos/prepare.log #if needed
 
 #create initial config
-if [ ! -f /etc/bareos/bareos-dir.d/director/bareos-dir.conf ]; then
+if [ -r /etc/bareos/bareos-dir.d/director/bareos-dir.conf ] || [ -r /etc/bareos/bareos-dir.conf ]; then
+      echo "migrate using existing config " >>/var/log/bareos/prepare.log
+      tar xfvz etc.tgz -C / etc/bareos-webui/configuration.ini
+      if [ -r /etc/bareos/bareos-dir.d/webui-profiles.conf ]; then
+        sed -i "s/CommandACL = status.*/CommandACL = !.bvfs_clear_cache, !.exit, !.sql, !configure, !create, !delete, !purge, !sqlquery, !umount, !unmount, *all*/g" /etc/bareos/bareos-dir.d/webui-profiles.conf
+      fi
       
+else
       #initial config from build
-      tar xfvz etc.tgz -C /
+      tar xfvz etc.tgz -C / 
         
       #change names
       NAME=$(grep -o -E "Name =(.*)-dir" /etc/bareos/bareos-dir.d/director/bareos-dir.conf|perl -p -e 's/.*=\s*(\w+)-dir/\1/g;')
@@ -94,11 +94,15 @@ if [ ! -f /etc/bareos/bareos-dir.d/director/bareos-dir.conf ]; then
       
 fi
 
+#fix rights
+chown -R bareos:bareos /etc/bareos*
 
 #db check
 if  (mysql -e "show databases" | cut -d \| -f 1 | grep -w bareos) >/dev/null; then
-  echo "Database exists"
-
+(  
+  echo "Try Update"
+	/usr/lib/bareos/scripts/update_bareos_tables
+) >>/var/log/bareos/prepare.log
 else
 (
   mysql <<EOS

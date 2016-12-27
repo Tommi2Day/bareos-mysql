@@ -35,8 +35,8 @@ docker run --name bareos-mysql \
 -p ${EXT_DB_PORT}:3306 -p ${EXT_HTML_PORT}:80
 tommi2day/bareos-mysql
 ```
-Bareos Gui Access
->http://$TARGET_HOST:$EXT_HTML_PORT/bareos-webui
+Bareos Gui Access:
+http://$TARGET_HOST:$EXT_HTML_PORT/bareos-webui
 
 #### local settings
 * bareos.env --> will be sourced each time container starts. 
@@ -56,8 +56,12 @@ newaliases
 postfix restart
 
 #Time
-echo "Europe/Berlin" > /etc/timezone
-dpkg-reconfigure -f noninteractive tzdata
+TZ=${TZ:-Etc/UTC}
+TZF=/usr/share/zoneinfo/$TZ
+if [ -r $TZF ];then
+	echo $TZ >/etc/timezone
+	rm /etc/localtime && ln -s $TZF /etc/localtime
+fi
 ntpdate -q ptbtime1.ptb.de
 ```
 
@@ -101,20 +105,25 @@ DB_ROOT_PASSWORD # create database with this password
 TZ #valid time zone name for /usr/share/zoneinfo
 ```
 
-### Attention: Update to Bareos 16.2 from previous versions
-In Bareos 16.2 the configuration file structure has been changed. Additional a database schema update is requested. 
-See the [documentation](http://doc.bareos.org/master/html/bareos-manual-main-reference.html#bareos-update) for details.
-Make sure you have a backup of your configuration files and the mysql database (e.g. mysqldump ...)
+### Attention: Update to Docker Bareos-Mysql:16.2 from previous versions
 
-If at the start of the container a file "/etc/bareos/bareos-dir.conf" is detected 
-it suspects an update to the new version is needed. It executes the supplied upgrade-database-script and tries to convert the existing configuration using 
-the downloaded bareos-migrate-config.sh script. This script extracts the configs 
-with bconsole commands und builds new config files only based on the extracted config, 
+First of all: Make sure you have a valid backup of all your configuration files and the mysql database 
+(e.g. mysqldump -A ..). You may need it in case of errors.
+
+The database engine has been changed from mysql to mariadb. The update will cause an unrecoverable change of
+the mysql datafiles. 
+
+In Bareos 16.2 the configuration file structure has been changed. 
+See the [documentation](http://doc.bareos.org/master/html/bareos-manual-main-reference.html#bareos-update) for details.
+Bareos provides a [migrate-config](https://raw.githubusercontent.com/bareos/bareos-contrib/master/misc/bareos-migrate-config/bareos-migrate-config.sh) 
+script. This script extracts the existing configuration 
+with bconsole show commands und builds pure new config files only based on the extracted config, 
 not on the existing config files. As of Bareos 16.2.4 this method is known to produce invalid
- configuration files, wich prevents the director to come up. 
- 
- To solve these errors you may connect to the container using 
- ```
- docker exec -ti bareos-mysql bash
- ```
- or stop the container fix the issues in the shared configuration directory and start again.
+ configuration files, which prevents the director to come up. 
+
+However: To extract the configuration you need a running director instance acessible by bconsole.
+Because this is not available when upgrading the docker container my start script will only do the most
+ important changes to bringup the director and leaves the directory changes for you.
+
+Alternativ you may run the migrate-config script against your running old 15.2 director, 
+and copy the resulting files over after the first boot of 16.2 succeeded and do a reload. 

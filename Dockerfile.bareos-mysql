@@ -28,7 +28,7 @@ RUN mkdir -p /db /backup
 
 
 #add scripts
-ADD [ "prepare.sh","start.sh","configure.sh","migrate_config.sh","/root/" ]
+ADD [ "prepare.sh","start.sh","configure.sh","/root/" ]
 RUN chmod u+x /root/*.sh
 RUN /root/configure.sh
 
