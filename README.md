@@ -21,6 +21,7 @@ docker run --name bareos-mysql \
 --add-host bareos:127.0.0.1 \
 --add-host ntp:192.53.103.108 \
 -e TARGET_HOST=$TARGET_HOST \
+-e TZ=$TZ \
 -e BAREOS_DB_PASSWORD=$BAREOS_DB_PASSWORD \
 -e DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD \
 -v ${BACKUP_DIR}:/backup \
@@ -69,8 +70,10 @@ BACKUP_DIR=/volume1/Backup/bareos
 #DOCKER_SHARED=$(pwd)}
 #SHARED_DIR=bareos-shared
 #TARGET_HOST=docker
+TZ=Europe/Berlin
 BAREOS_DB_PASSWORD=bareos
 DB_ROOT_PASSWORD=supersecret
+TZ=Europe/Berlin
 EXT_HTML_PORT=33080
 #EXT_DB_PORT=3306
 #EXT_DIR_PORT=9101
@@ -94,5 +97,24 @@ VOLUME ["/etc/bareos","/var/log/bareos","/etc/bareos-webui"] # Bareos konfigurat
 ```sh
 TARGET_HOST # Host/IP for bareos dir, fd and sd Address configuration parameter  
 BAREOS_DB_PASSWORD # create bareos user account with this password
-DB_ROOT_PASSWORD # create database with this password 
+DB_ROOT_PASSWORD # create database with this password
+TZ #valid time zone name for /usr/share/zoneinfo
 ```
+
+### Attention: Update to Bareos 16.2 from previous versions
+In Bareos 16.2 the configuration file structure has been changed. Additional a database schema update is requested. 
+See the [documentation](http://doc.bareos.org/master/html/bareos-manual-main-reference.html#bareos-update) for details.
+Make sure you have a backup of your configuration files and the mysql database (e.g. mysqldump ...)
+
+If at the start of the container a file "/etc/bareos/bareos-dir.conf" is detected 
+it suspects an update to the new version is needed. It executes the supplied upgrade-database-script and tries to convert the existing configuration using 
+the downloaded bareos-migrate-config.sh script. This script extracts the configs 
+with bconsole commands und builds new config files only based on the extracted config, 
+not on the existing config files. As of Bareos 16.2.4 this method is known to produce invalid
+ configuration files, wich prevents the director to come up. 
+ 
+ To solve these errors you may connect to the container using 
+ ```
+ docker exec -ti bareos-mysql bash
+ ```
+ or stop the container fix the issues in the shared configuration directory and start again.

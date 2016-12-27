@@ -1,10 +1,13 @@
 #!/bin/bash
 #
 # bareos docker container starter
-VERS=15.2
+
 DOCKER_USER=tommi2day
 DOCKER=docker
-VMNAME=${1:-bareos-mysql}
+VMNAME=${1:-"bareos-mysql"}
+shift
+VERS=${1:-"16.2"}
+shift
 #define variables
 if [ -r run.vars ]; then
 	source run.vars
@@ -23,6 +26,7 @@ EXT_DB_PORT=${EXT_DB_PORT:-33306}
 EXT_DIR_PORT=${EXT_DIR_PORT:-9101}
 EXT_FD_PORT=${EXT_FD_PORT:-9102}
 EXT_SD_PORT=${EXT_SD_PORT:-9103}
+TZ=${TZ:-Etc/UTC}
 
 #debug
 if [ -z "$DEBUG" ]; then
@@ -59,7 +63,7 @@ done
 
 
 #copy predefined local system settings
-for f in bareos.env bareos-dir.d bareos-sd.d bareos-clients.d ]; do
+for f in bareos.env bareos-dir.d bareos-sd.d bareos-clients.d ; do
 	if [ -e $f ]; then
 		cp -rf $f ${SHARED_DIR}/etc-bareos
 	fi
@@ -75,6 +79,7 @@ $DOCKER run $RUN \
 -e TARGET_HOST=$TARGET_HOST \
 -e BAREOS_DB_PASSWORD=$BAREOS_DB_PASSWORD \
 -e DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD \
+-e TZ=$TZ \
 -v ${BACKUP_DIR}:/backup \
 -v ${SHARED_DIR}/db:/db \
 -v ${SHARED_DIR}/etc-bareos:/etc/bareos \
