@@ -6,7 +6,7 @@ DOCKER_USER=tommi2day
 DOCKER=docker
 VMNAME=${1:-"bareos-mysql"}
 shift
-VERS=${1:-"16.2"}
+VERS="17.2"
 shift
 #define variables
 if [ -r run.vars ]; then
