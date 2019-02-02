@@ -37,6 +37,7 @@ tommi2day/bareos-mysql
 ```
 Bareos Gui Access:
 http://$TARGET_HOST:$EXT_HTML_PORT/bareos-webui
+User admin Password admin
 
 #### local settings
 * bareos.env --> will be sourced each time container starts. 
@@ -105,7 +106,7 @@ DB_ROOT_PASSWORD # create database with this password
 TZ #valid time zone name for /usr/share/zoneinfo
 ```
 
-### Attention: Update to Docker Bareos-Mysql:16.2 from previous versions
+### Attention: Update to Docker Bareos-Mysql:16.2 onwards from previous versions
 
 First of all: Make sure you have a valid backup of all your configuration files and the mysql database 
 (e.g. mysqldump -A ..). You may need it in case of errors.

@@ -6,7 +6,7 @@ DOCKER_USER=tommi2day
 DOCKER=docker
 VMNAME=${1:-"bareos-mysql"}
 shift
-VERS="16.2"
+VERS=${1:-"18.2"}
 shift
 #define variables
 if [ -r run.vars ]; then
@@ -16,6 +16,7 @@ fi
 #set defaults if needed
 HOSTNAME=${HOSTNAME:-$(uname -n)}
 DOCKER_SHARED=${DOCKER_SHARED:-$(pwd)}
+CONFIG_DIR=$(pwd)/config
 SHARED_DIR=${DOCKER_SHARED}/bareos-shared
 BACKUP_DIR=${BACKUP_DIR:-${SHARED_DIR}/backup}
 TARGET_HOST=${TARGET_HOST:-$HOSTNAME}
@@ -30,7 +31,7 @@ TZ=${TZ:-Etc/UTC}
 
 #debug
 if [ -z "$DEBUG" ]; then
-	RUN="-d "
+	RUN="-d --restart=always "
 else
 	RUN="--rm=true -it --entrypoint bash "
 
@@ -55,19 +56,26 @@ fi
 if [ ! -d  $BACKUP_DIR ]; then
 		mkdir -p $BACKUP_DIR
 fi
-for d in db log-mysql log-bareos log-apache2 etc-bareos etc-bareos-webui; do
+for d in db log-mysql log-bareos log-apache2 ; do
 	if [ ! -d  ${SHARED_DIR}/$d ]; then
 		mkdir -p ${SHARED_DIR}/$d
+		chmod a+rwx ${SHARED_DIR}/$d
+	fi
+done
+for d in etc-bareos etc-bareos-webui etc-mysql; do
+	if [ ! -d  ${CONFIG_DIR}/$d ]; then
+		mkdir -p ${CONFIG_DIR}/$d
 	fi
 done
 
 
 #copy predefined local system settings
 for f in bareos.env bareos-dir.d bareos-sd.d bareos-clients.d ; do
-	if [ -e $f ]; then
-		cp -rf $f ${SHARED_DIR}/etc-bareos
+	if [ ! -e ${CONFIG_DIR}/etc-bareos/$f ] && [ -e $f ]; then
+		cp -rf $f ${CONFIG_DIR}/etc-bareos
 	fi
 done
+#sudo chmod -R a+rwx ${SHARED_DIR}
 
 #run it
 echo "	
@@ -75,22 +83,25 @@ $DOCKER run $RUN \
 --name ${VMNAME} \
 --hostname $VMNAME \
 --add-host bareos:127.0.0.1 \
---add-host ntp:192.53.103.108 \
+--dns=192.168.101.31 \
+--dns-search=intern.tdressler.net \
 -e TARGET_HOST=$TARGET_HOST \
 -e BAREOS_DB_PASSWORD=$BAREOS_DB_PASSWORD \
 -e DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD \
 -e TZ=$TZ \
+-v ${CONFIG_DIR}/etc-bareos:/etc/bareos \
+-v ${CONFIG_DIR}/etc-mysql:/etc/mysql \
+-v ${CONFIG_DIR}/etc-bareos-webui:/etc/bareos-webui \
 -v ${BACKUP_DIR}:/backup \
 -v ${SHARED_DIR}/db:/db \
--v ${SHARED_DIR}/etc-bareos:/etc/bareos \
 -v ${SHARED_DIR}/log-mysql:/var/log/mysql \
 -v ${SHARED_DIR}/log-bareos:/var/log/bareos \
--v ${SHARED_DIR}/etc-bareos-webui:/etc/bareos-webui \
 -v ${SHARED_DIR}/log-apache2:/var/log/apache2 \
 -p ${EXT_DIR_PORT}:9101 -p ${EXT_FD_PORT}:9102 -p ${EXT_SD_PORT}:9103 \
 -p ${EXT_DB_PORT}:3306 -p ${EXT_HTML_PORT}:80 \
 ${DOCKER_USER}/$VMNAME:$VERS $@ " >starter
 
+#--add-host ntp:192.53.103.108 \
 if [ "$OSTYPE" = "msys" ]; then
 	mv starter starter.ps1
 	powershell -File starter.ps1

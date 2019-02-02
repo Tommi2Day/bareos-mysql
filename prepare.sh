@@ -11,6 +11,11 @@ if [ -r /etc/bareos/bareos.env ]; then
 fi
 chown -R mysql:adm /db /var/log/mysql
 
+if [ ! -r /etc/mysql/mariadb.cnf ]; then
+	tar xfvz etc.tgz -C / etc/mysql
+	chmod -R a+r /etc/mysql/* 
+fi
+
 #init db and start db daemon
 DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-mysql}
 if [ ! -d /db ] || ! ls -1 /db/* >/dev/null ; then
@@ -20,24 +25,21 @@ if [ ! -d /db ] || ! ls -1 /db/* >/dev/null ; then
   #mariadb 5.6 procedure
   sed -i "s!datadir=.*!#datadir=/db!" /etc/mysql/my.cnf
   echo -e "[server]\ndatadir=/db" >>/etc/mysql/my.cnf
-  mysql_install_db --datadir=/db --force
-  /usr/bin/mysqld_safe --datadir=/db &
+  mysql_install_db --datadir=/db --user=mysql --force
+  /usr/bin/mysqld_safe --datadir=/db --user=mysql &
   sleep 10
   
+mysqladmin -u root "$DB_ROOT_PASSWORD" |tee -a /var/log/bareos/prepare.log
+mysqladmin -u root -h localhost password "$DB_ROOT_PASSWORD" |tee -a /var/log/bareos/prepare.log
+mysqladmin -u root -h $HOSTNAME password "$DB_ROOT_PASSWORD" |tee -a /var/log/bareos/prepare.log
  
-#  mysql 5.7 procedure
-# sed -i "s!datadir=.*!datadir=/db!" /etc/mysql/my.cnf
-#  mysqld --initialize-insecure --datadir=/db
-# /usr/bin/mysqld_safe --datadir=/db &
-#  sleep 10
-#  mysql --password= <<EOP
-#alter user 'root'@'localhost' identified by "$DB_ROOT_PASSWORD";
-#flush privileges;
-#EOP
-) >/var/log/bareos/prepare.log
+) |tee -a /var/log/bareos/prepare.log
 else
-  /usr/bin/mysqld_safe --datadir=/db &
+  chown -R mysql:mysql /db
+  /usr/bin/mysqld_safe --datadir=/db --user=mysql &
   sleep 5
+  #do mysql upgrade
+  mysql_upgrade |tee -a /var/log/bareos/prepare.log #if needed
 fi
 
 #set passwordless db access			
@@ -50,8 +52,6 @@ password=${DB_ROOT_PASSWORD}
 " >$HOME/.my.cnf
 fi
 
-mysqladmin password "$DB_ROOT_PASSWORD"
-mysql_upgrade >>/var/log/bareos/prepare.log #if needed
 
 #create initial config
 if [ -r /etc/bareos/bareos-dir.d/director/bareos-dir.conf ] || [ -r /etc/bareos/bareos-dir.conf ]; then
@@ -63,7 +63,7 @@ if [ -r /etc/bareos/bareos-dir.d/director/bareos-dir.conf ] || [ -r /etc/bareos/
       
 else
       #initial config from build
-      tar xfvz etc.tgz -C / 
+      tar xfvz etc.tgz -C / etc/bareos etc/bareos-webui
         
       #change names
       NAME=$(grep -o -E "Name =(.*)-dir" /etc/bareos/bareos-dir.d/director/bareos-dir.conf|perl -p -e 's/.*=\s*(\w+)-dir/\1/g;')
@@ -102,7 +102,7 @@ if  (mysql -e "show databases" | cut -d \| -f 1 | grep -w bareos) >/dev/null; th
 (  
   echo "Try Update"
 	/usr/lib/bareos/scripts/update_bareos_tables
-) >>/var/log/bareos/prepare.log
+) |tee -a /var/log/bareos/prepare.log
 else
 (
   mysql <<EOS
@@ -114,10 +114,10 @@ EOS
   /usr/lib/bareos/scripts/create_bareos_database
   /usr/lib/bareos/scripts/make_bareos_tables
   /usr/lib/bareos/scripts/grant_bareos_privileges
-)>>/var/log/bareos/prepare.log
+)|tee -a /var/log/bareos/prepare.log
 fi
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') Start Daemons" >>/var/log/bareos/bareos.log
+echo "$(date '+%Y-%m-%d %H:%M:%S') Start Daemons" |tee -a /var/log/bareos/bareos.log
 #fix permissions (again)
 chown -R bareos:bareos /var/log/bareos /backup
 chown -R www-data:www-data /var/log/apache2
